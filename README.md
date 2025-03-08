@@ -5,7 +5,6 @@
 
 
 function exitGame() public {
-   
     require(activePlayers[msg.sender], "Not a participant");
     require(playerCount < 2, "Game has started");
     
