@@ -73,3 +73,38 @@ function getHash(uint256 choice, string memory salt) public pure returns (bytes3
 }
 
 
+3.อธิบายโค้ดส่วนที่จัดการกับความล่าช้าที่ผู้เล่นไม่ครบทั้งสองคนเสียที
+
+ในบางกรณี เกมอาจติดอยู่ในสถานะที่ไม่มีผู้เล่นครบสองคน หรือมีคนเข้ามาแต่ไม่เล่นต่อ โค้ดได้จัดการปัญหานี้ด้วยเงื่อนไขต่อไปนี้:
+
+-exitGame() 
+
+function exitGame() public {
+    require(activePlayers[msg.sender], "Not a participant");
+    require(playerCount < 2, "Game has started");
+
+    payable(msg.sender).transfer(1 ether);
+    activePlayers[msg.sender] = false;
+    hasNotPlayed[msg.sender] = false;
+    playerCount--;
+}
+
+-refundSinglePlayer() – ถ้าเกมค้างนานเกิน 1 ชั่วโมง และมีแค่ผู้เล่นคนเดียว
+
+function refundSinglePlayer() public {
+    require(playerCount == 1, "Invalid game state");
+    require(timeTracker.elapsedSeconds() > 3600, "Time limit not met");
+
+    payable(participantList[0]).transfer(prizePool);
+    restartGame();
+}
+
+-enforceGameEnd() – ถ้าเกมเริ่มแล้ว แต่ไม่มีใครเปิดเผยตัวเลือกภายใน 2 ชั่วโมง
+
+function enforceGameEnd() public {
+    require(playerCount == 2, "Game hasn't started");
+    require(timeTracker.elapsedSeconds() > 7200, "Time limit not met");
+
+    payable(msg.sender).transfer(prizePool);
+    restartGame();
+}
