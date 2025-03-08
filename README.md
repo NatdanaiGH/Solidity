@@ -39,6 +39,8 @@ function refundSinglePlayer() public {
 }
 
 
+
+
 2.อธิบายโค้ดส่วนที่ทำการซ่อน choice และ commit
 
 การซ่อนตัวเลือกของผู้เล่น (Rock, Paper, Scissors, Lizard, Spock) ทำโดยใช้เทคนิค commit-reveal ซึ่งช่วยป้องกัน front-running (การดูข้อมูลของผู้เล่นก่อนแล้วโกง)
@@ -71,6 +73,8 @@ function reveal(address player, uint256 choice, string memory salt) public view 
 function getHash(uint256 choice, string memory salt) public pure returns (bytes32) {
     return keccak256(abi.encodePacked(choice, salt));
 }
+
+
 
 
 3.อธิบายโค้ดส่วนที่จัดการกับความล่าช้าที่ผู้เล่นไม่ครบทั้งสองคนเสียที
@@ -108,3 +112,46 @@ function enforceGameEnd() public {
     payable(msg.sender).transfer(prizePool);
     restartGame();
 }
+
+
+
+4.อธิบายโค้ดส่วนทำการ reveal และนำ choice มาตัดสินผู้ชนะ
+
+-การเปิดเผยตัวเลือก (Reveal Choice)
+ผู้เล่นต้องเปิดเผย choice และ salt เพื่อให้ระบบตรวจสอบความถูกต้อง
+
+function discloseChoice(uint256 choice, string memory salt) external onlyParticipants {
+    require(hasNotPlayed[msg.sender], "Already disclosed");
+    require(choice < 5, "Invalid choice");
+    require(commitReveal.reveal(msg.sender, choice, salt), "Invalid reveal");
+
+    playerSelections[msg.sender] = choice;
+    hasNotPlayed[msg.sender] = false;
+    revealCount++;
+
+    if (revealCount == 2) {
+        determineWinner();
+    }
+}
+
+-การตัดสินผู้ชนะ
+เมื่อผู้เล่นทั้งสองเปิดเผยตัวเลือกแล้ว ฟังก์ชัน determineWinner() จะใช้กฎของ Rock, Paper, Scissors, Lizard, Spock เพื่อตัดสินว่าใครชนะ
+
+function determineWinner() private {
+    uint256 choiceA = playerSelections[participantList[0]];
+    uint256 choiceB = playerSelections[participantList[1]];
+    address payable playerA = payable(participantList[0]);
+    address payable playerB = payable(participantList[1]);
+
+    if ((choiceA + 1) % 5 == choiceB || (choiceA + 3) % 5 == choiceB) {
+        playerB.transfer(prizePool);
+    } else if ((choiceB + 1) % 5 == choiceA || (choiceB + 3) % 5 == choiceA) {
+        playerA.transfer(prizePool);
+    } else {
+        playerA.transfer(prizePool / 2);
+        playerB.transfer(prizePool / 2);
+    }
+    restartGame();
+}
+ใช้ (choiceA + 1) % 5 == choiceB และ (choiceA + 3) % 5 == choiceB เพื่อตรวจสอบว่าใครชนะ
+หากผลเสมอ (else case) จะแบ่งเงินรางวัลให้ผู้เล่นทั้งสอง
