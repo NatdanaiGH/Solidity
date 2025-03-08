@@ -49,6 +49,7 @@ function refundSinglePlayer() public {
 function submitCommitment(bytes32 _commitment) external onlyParticipants {
     commitReveal.commitMove(msg.sender, _commitment, 0, "");
 }
+
 ภายใน CommitReveal.sol ฟังก์ชัน commitMove จะบันทึกค่าที่ถูกแฮชเอาไว้
 
 function commitMove(address player, bytes32 commitment, uint256 choice, string memory salt) public {
@@ -56,6 +57,7 @@ function commitMove(address player, bytes32 commitment, uint256 choice, string m
     choices[player] = choice;
     salts[player] = salt;
 }
+
 -การ Reveal (เปิดเผยข้อมูล)
 ผู้เล่นต้องส่งค่าที่แท้จริงของ choice และ salt มาเพื่อตรวจสอบว่าตรงกับค่าที่ commit ไว้หรือไม่
 
@@ -63,6 +65,7 @@ function reveal(address player, uint256 choice, string memory salt) public view 
     bytes32 expectedCommitment = getHash(choice, salt);
     return commitments[player] == expectedCommitment;
 }
+
 ฟังก์ชัน getHash ใช้ keccak256 เพื่อสร้างค่าแฮชที่ใช้ตรวจสอบ
 
 function getHash(uint256 choice, string memory salt) public pure returns (bytes32) {
