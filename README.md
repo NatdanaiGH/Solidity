@@ -21,6 +21,7 @@ function exitGame() public {
 function enforceGameEnd() public {
     require(playerCount == 2, "Game hasn't started");
     require(timeTracker.elapsedSeconds() > 7200, "Time limit not met");
+   
     payable(msg.sender).transfer(prizePool);
     restartGame();
 }
@@ -32,6 +33,7 @@ function enforceGameEnd() public {
 function refundSinglePlayer() public {
     require(playerCount == 1, "Invalid game state");
     require(timeTracker.elapsedSeconds() > 3600, "Time limit not met");
+   
     payable(participantList[0]).transfer(prizePool);
     restartGame();
 }
