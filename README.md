@@ -28,7 +28,7 @@ bytes32 commitment = keccak256(abi.encodePacked(choice, salt));
 # 4. อธิบายโค้ดส่วนทำการ reveal และนำ choice มาตัดสินผู้ชนะ
 เมื่อผู้เล่นทั้งสองเปิดเผยผล (discloseChoice()) ระบบจะตรวจสอบว่า hash ตรงกับที่ commit หรือไม่
 นำค่าที่เปิดเผยมาเปรียบเทียบกันเพื่อหาผู้ชนะตามกติกา Rock, Paper, Scissors, Lizard, Spock
-ใช้เงื่อนไขเพื่อตัดสินว่าใครชนะ:
+ใช้เงื่อนไขเพื่อตัดสินว่าใครชนะ
 
 if ((choiceA + 1) % 5 == choiceB || (choiceA + 3) % 5 == choiceB) {
     playerB.transfer(prizePool);
