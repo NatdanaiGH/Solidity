@@ -5,124 +5,129 @@ import "./TimeUnit.sol";
 import "./CommitReveal.sol";
 
 contract RPS {
-    uint256 public playerCount = 0;
-    uint256 public prizePool = 0;
-    mapping(address => uint256) public playerSelections;
-    mapping(address => bool) public hasNotPlayed;
-    mapping(address => bool) public activePlayers;
-    address[2] public participantList;
-    uint256 public revealCount = 0;
+    struct Player {
+        address payable addr;
+        bytes32 commitment;
+        uint256 choice;
+        bool hasRevealed;
+    }
 
-    address[] private authorizedPlayers = [
-        0x5B38Da6a701c568545dCfcB03FcB875f56beddC4,
-        0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2,
-        0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db,
-        0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB
-    ];
+    mapping(address => bool) public authorizedPlayers;
+    Player[2] public players;
+    uint256 public prizePool;
+    uint256 public revealDeadline;
+    uint8 public playerCount;
+    uint8 public revealCount;
+    bool public gameActive;
 
-    CommitReveal public commitReveal = new CommitReveal();
-    TimeUnit public timeTracker = new TimeUnit();
+    CommitReveal public commitReveal;
+    TimeUnit public timeTracker;
+
+    event GameStarted(address indexed player1, address indexed player2);
+    event PlayerCommitted(address indexed player);
+    event PlayerRevealed(address indexed player, uint256 choice);
+    event GameResult(address winner, uint256 prizeAmount);
+    event GameReset();
 
     constructor() {
         commitReveal = new CommitReveal();
+        timeTracker = new TimeUnit();
+        authorizedPlayers[0x5B38Da6a701c568545dCfcB03FcB875f56beddC4] = true;
+        authorizedPlayers[0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2] = true;
+        authorizedPlayers[0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db] = true;
+        authorizedPlayers[0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB] = true;
     }
 
-    modifier onlyParticipants() {
-        require(activePlayers[msg.sender], "Not an active participant");
+    modifier onlyAuthorized() {
+        require(authorizedPlayers[msg.sender], "Not an authorized player");
         _;
     }
 
-    function isAuthorized(address player) private view returns (bool) {
-        for (uint256 i = 0; i < authorizedPlayers.length; i++) {
-            if (player == authorizedPlayers[i]) {
-                return true;
-            }
-        }
-        return false;
+    modifier onlyDuringGame() {
+        require(gameActive, "No active game");
+        _;
     }
 
-    function joinGame() public payable {
-        require(isAuthorized(msg.sender), "Access denied");
+    function joinGame() external payable onlyAuthorized {
         require(playerCount < 2, "Game is full");
-        require(!activePlayers[msg.sender], "Already in game");
         require(msg.value == 1 ether, "Entry fee: 1 ETH required");
         
+        players[playerCount] = Player(payable(msg.sender), bytes32(0), 0, false);
         prizePool += msg.value;
-        hasNotPlayed[msg.sender] = true;
-        activePlayers[msg.sender] = true;
-        participantList[playerCount] = msg.sender;
         playerCount++;
-    }
-
-    function leaveGame() public {
-        require(activePlayers[msg.sender], "Not a participant");
-        require(playerCount < 2, "Game has started");
         
-        payable(msg.sender).transfer(1 ether);
-        activePlayers[msg.sender] = false;
-        hasNotPlayed[msg.sender] = false;
-        playerCount--;
+        if (playerCount == 2) {
+            gameActive = true;
+            revealDeadline = block.timestamp + 2 hours;
+            emit GameStarted(players[0].addr, players[1].addr);
+        }
     }
 
-    function submitCommitment(bytes32 _commitment) external onlyParticipants {
-        commitReveal.commitMove(msg.sender, _commitment, 0, "");
-    }
-
-    function discloseChoice(uint256 choice, string memory salt) external onlyParticipants {
-        require(hasNotPlayed[msg.sender], "Already disclosed");
-        require(choice < 5, "Invalid choice");
-        require(commitReveal.reveal(msg.sender, choice, salt), "Invalid reveal");
+    function commitChoice(bytes32 _commitment) external onlyDuringGame {
+        require(msg.sender == players[0].addr || msg.sender == players[1].addr, "Not a participant");
+        uint8 index = (msg.sender == players[0].addr) ? 0 : 1;
+        require(players[index].commitment == bytes32(0), "Already committed");
         
-        playerSelections[msg.sender] = choice;
-        hasNotPlayed[msg.sender] = false;
+        players[index].commitment = _commitment;
+        emit PlayerCommitted(msg.sender);
+    }
+
+    function revealChoice(uint256 _choice, string memory _salt) external onlyDuringGame {
+        require(_choice < 5, "Invalid choice");
+        uint8 index = (msg.sender == players[0].addr) ? 0 : 1;
+        require(!players[index].hasRevealed, "Already revealed");
+        require(commitReveal.reveal(msg.sender, _choice, _salt), "Invalid reveal");
+        
+        players[index].choice = _choice;
+        players[index].hasRevealed = true;
         revealCount++;
-
+        
+        emit PlayerRevealed(msg.sender, _choice);
+        
         if (revealCount == 2) {
             determineWinner();
         }
     }
 
     function determineWinner() private {
-        uint256 choiceA = playerSelections[participantList[0]];
-        uint256 choiceB = playerSelections[participantList[1]];
-        address payable playerA = payable(participantList[0]);
-        address payable playerB = payable(participantList[1]);
+        uint256 choiceA = players[0].choice;
+        uint256 choiceB = players[1].choice;
+        address payable winner;
+        uint256 winnerPrize = prizePool;
 
         if ((choiceA + 1) % 5 == choiceB || (choiceA + 3) % 5 == choiceB) {
-            playerB.transfer(prizePool);
+            winner = players[1].addr;
         } else if ((choiceB + 1) % 5 == choiceA || (choiceB + 3) % 5 == choiceA) {
-            playerA.transfer(prizePool);
+            winner = players[0].addr;
         } else {
-            playerA.transfer(prizePool / 2);
-            playerB.transfer(prizePool / 2);
+            players[0].addr.transfer(prizePool / 2);
+            players[1].addr.transfer(prizePool / 2);
+            resetGame();
+            return;
         }
-        restartGame();
+
+        winner.transfer(winnerPrize);
+        emit GameResult(winner, winnerPrize);
+        resetGame();
     }
 
-    function restartGame() internal {
-        commitReveal.resetCommit(participantList[0], participantList[1]);
-        delete playerSelections[participantList[0]];
-        delete playerSelections[participantList[1]];
-        activePlayers[participantList[0]] = false;
-        activePlayers[participantList[1]] = false;
-        playerCount = 0;
+    function claimTimeout() external onlyDuringGame {
+        require(block.timestamp > revealDeadline, "Reveal period not over");
+        
+        if (revealCount == 1) {
+            uint8 index = players[0].hasRevealed ? 0 : 1;
+            players[index].addr.transfer(prizePool);
+            resetGame();
+        }
+    }
+
+    function resetGame() private {
+        delete players;
         prizePool = 0;
+        playerCount = 0;
         revealCount = 0;
-    }
-
-    function enforceGameEnd() public {
-        require(playerCount == 2, "Game hasn't started");
-        require(timeTracker.elapsedSeconds() > 7200, "Time limit not met");
-
-        payable(msg.sender).transfer(prizePool);
-        restartGame();
-    }
-
-    function refundSinglePlayer() public {
-        require(playerCount == 1, "Invalid game state");
-        require(timeTracker.elapsedSeconds() > 3600, "Time limit not met");
-
-        payable(participantList[0]).transfer(prizePool);
-        restartGame();
+        gameActive = false;
+        emit GameReset();
     }
 }
+
